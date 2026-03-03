@@ -57,7 +57,7 @@ $categories = $db->query("SELECT * FROM categories ORDER BY ordre")->fetchAll();
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="bg-light">
-                    <tr><th style="width:60px">Image</th><th>Produit</th><th>Catégorie</th><th class="text-end">Prix</th><th>Unité</th><th>Délai</th><th>Statut</th><th>Actions</th></tr>
+                    <tr><th style="width:60px">Image</th><th>Produit</th><th>Catégorie</th><th class="text-end">Prix</th><th>Stock</th><th>Unité</th><th>Délai</th><th>Statut</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($produits as $p):
@@ -83,6 +83,7 @@ $categories = $db->query("SELECT * FROM categories ORDER BY ordre")->fetchAll();
                         </td>
                         <td><span class="badge bg-primary-soft text-primary"><?= $p['categorie_nom'] ?></span></td>
                         <td class="text-end fw-bold"><?= formatPrix($p['prix_base']) ?></td>
+                        <td class="fw-bold text-center"><?= isset($p['stock']) ? (int)$p['stock'] : 0 ?></td>
                         <td><small><?= $p['unite'] ?></small></td>
                         <td><small><?= $p['delai_production'] ?></small></td>
                         <td>

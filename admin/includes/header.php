@@ -75,6 +75,12 @@ $stats_rapide = getStats();
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link <?= in_array($page, ['stock', 'stock_mouvement']) ? 'active' : '' ?>" href="index.php?page=stock">
+                            <i class="bi bi-archive"></i>
+                            <span>Stock</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link <?= $page === 'categories' ? 'active' : '' ?>" href="index.php?page=categories">
                             <i class="bi bi-tags"></i>
                             <span>Catégories</span>

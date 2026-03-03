@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS produits (
     populaire TINYINT(1) DEFAULT 0,
     actif TINYINT(1) DEFAULT 1,
     ordre INT DEFAULT 0,
+    stock INT DEFAULT 0,
+    stock_min INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (categorie_id) REFERENCES categories(id) ON DELETE CASCADE
@@ -279,6 +281,21 @@ CREATE TABLE IF NOT EXISTS villes_livraison (
     frais_livraison DECIMAL(10,2) NOT NULL DEFAULT 30.00,
     delai_livraison VARCHAR(50) DEFAULT '24-48h',
     actif TINYINT(1) DEFAULT 1
+) ENGINE=InnoDB;
+
+-- =============================================
+-- Table: Mouvements de stock
+-- =============================================
+CREATE TABLE IF NOT EXISTS stock_mouvements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    produit_id INT NOT NULL,
+    type ENUM('entree','sortie','ajustement') NOT NULL,
+    quantite INT NOT NULL,
+    commentaire TEXT DEFAULT NULL,
+    admin_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (produit_id) REFERENCES produits(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- =============================================

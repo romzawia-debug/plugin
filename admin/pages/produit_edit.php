@@ -31,6 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sauvegarder'])) {
         'populaire' => isset($_POST['populaire']) ? 1 : 0,
         'actif' => isset($_POST['actif']) ? 1 : 0,
         'ordre' => (int)$_POST['ordre'],
+            'stock' => (int)($_POST['stock'] ?? 0),
+            'stock_min' => (int)($_POST['stock_min'] ?? 0),
     ];
 
     // Image upload
@@ -59,11 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sauvegarder'])) {
     $data['image'] = $image_name;
 
     if ($produit_id && $produit) {
-        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, delai_production=?, populaire=?, actif=?, ordre=?, image=? WHERE id=?";
+        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, delai_production=?, populaire=?, actif=?, ordre=?, stock=?, stock_min=?, image=? WHERE id=?";
         $db->prepare($sql)->execute([...array_values($data), $produit_id]);
         setFlash('success', 'Produit mis à jour avec succès.');
     } else {
-        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, delai_production, populaire, actif, ordre, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, delai_production, populaire, actif, ordre, stock, stock_min, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         $db->prepare($sql)->execute(array_values($data));
         $produit_id = $db->lastInsertId();
         setFlash('success', 'Produit créé avec succès.');
@@ -184,6 +186,14 @@ if ($produit && !empty($produit['image'])) {
                         <div class="col-md-4">
                             <label class="form-label">Ordre d'affichage</label>
                             <input type="number" name="ordre" class="form-control" value="<?= $produit['ordre'] ?? 0 ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Stock actuel</label>
+                            <input type="number" name="stock" class="form-control" value="<?= isset($produit['stock']) ? (int)$produit['stock'] : 0 ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Seuil alerte</label>
+                            <input type="number" name="stock_min" class="form-control" value="<?= isset($produit['stock_min']) ? (int)$produit['stock_min'] : 0 ?>">
                         </div>
                     </div>
                 </div>
