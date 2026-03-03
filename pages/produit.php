@@ -141,6 +141,29 @@ $_wa_clean = str_replace(['+', ' ', '-', '(', ')'], '', $_wa_number ?: APP_PHONE
             </div>
         </div>
 
+        <!-- Custom fields -->
+        <?php
+        $custom_fields = json_decode($produit['custom_fields'] ?? '[]', true) ?: [];
+        if (!empty($custom_fields)): ?>
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <?php foreach ($custom_fields as $field): ?>
+                            <?php if ($field['type'] === 'image' && $field['value']): ?>
+                                <div class="mb-3">
+                                    <img src="uploads/custom_fields/<?= htmlspecialchars($field['value']) ?>" class="img-fluid" alt="<?= htmlspecialchars($field['label']) ?>">
+                                </div>
+                            <?php else: ?>
+                                <p><strong><?= htmlspecialchars($field['label']) ?>:</strong> <?= nl2br(htmlspecialchars($field['value'])) ?></p>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Description (rendered as HTML from TinyMCE) -->
         <?php if ($produit['description']): ?>
         <div class="row mt-5">

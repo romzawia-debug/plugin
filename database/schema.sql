@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS produits (
     images_galerie TEXT, -- JSON array d'images
     options JSON DEFAULT NULL, -- Options configurables (taille, papier, finition, etc.)
     specifications JSON DEFAULT NULL,
+    custom_fields JSON DEFAULT NULL, -- champs personnalisés définis par l'admin
     populaire TINYINT(1) DEFAULT 0,
     actif TINYINT(1) DEFAULT 1,
     ordre INT DEFAULT 0,

@@ -5,11 +5,15 @@
 $db = getDB();
 $produit_id = (int)($_GET['id'] ?? 0);
 $produit = null;
+$custom_fields = [];
 
 if ($produit_id) {
     $stmt = $db->prepare("SELECT * FROM produits WHERE id = ?");
     $stmt->execute([$produit_id]);
     $produit = $stmt->fetch();
+    if ($produit && !empty($produit['custom_fields'])) {
+        $custom_fields = json_decode($produit['custom_fields'], true) ?: [];
+    }
 }
 
 $categories = $db->query("SELECT * FROM categories WHERE actif = 1 ORDER BY ordre")->fetchAll();
@@ -60,12 +64,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sauvegarder'])) {
     }
     $data['image'] = $image_name;
 
+    // handle custom fields
+    $customs = [];
+    $labels = $_POST['custom_label'] ?? [];
+    $types = $_POST['custom_type'] ?? [];
+    $values = $_POST['custom_value'] ?? [];
+    $existing_images = $_POST['custom_image_existing'] ?? [];
+    $delete_flags = $_POST['delete_custom_image'] ?? [];
+    foreach ($labels as $idx => $lbl) {
+        $lbl = clean($lbl);
+        $type = $types[$idx] ?? 'text';
+        $val = '';
+        if ($type === 'image') {
+            // manage upload
+            if (isset($_FILES['custom_image']['name'][$idx]) && $_FILES['custom_image']['error'][$idx] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($_FILES['custom_image']['name'][$idx], PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'])) {
+                    $upload_dir = __DIR__ . '/../../uploads/custom_fields/';
+                    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+                    $filename = uniqid('cf_') . '.' . $ext;
+                    move_uploaded_file($_FILES['custom_image']['tmp_name'][$idx], $upload_dir . $filename);
+                    $val = $filename;
+                    // delete previous if requested
+                    if (!empty($existing_images[$idx]) && !empty($delete_flags[$idx])) {
+                        $old = $existing_images[$idx];
+                        if (file_exists($upload_dir . $old)) unlink($upload_dir . $old);
+                    }
+                }
+            } else {
+                if (!empty($existing_images[$idx]) && empty($delete_flags[$idx])) {
+                    $val = $existing_images[$idx];
+                }
+            }
+        } else {
+            $val = clean($values[$idx] ?? '');
+        }
+        if ($lbl !== '') {
+            $customs[] = ['label' => $lbl, 'type' => $type, 'value' => $val];
+        }
+    }
+    $data['custom_fields'] = json_encode($customs);
+
     if ($produit_id && $produit) {
-        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, delai_production=?, populaire=?, actif=?, ordre=?, stock=?, stock_min=?, image=? WHERE id=?";
+        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, delai_production=?, populaire=?, actif=?, ordre=?, stock=?, stock_min=?, custom_fields=?, image=? WHERE id=?";
         $db->prepare($sql)->execute([...array_values($data), $produit_id]);
         setFlash('success', 'Produit mis à jour avec succès.');
     } else {
-        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, delai_production, populaire, actif, ordre, stock, stock_min, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, delai_production, populaire, actif, ordre, stock, stock_min, custom_fields, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         $db->prepare($sql)->execute(array_values($data));
         $produit_id = $db->lastInsertId();
         setFlash('success', 'Produit créé avec succès.');
@@ -198,6 +243,51 @@ if ($produit && !empty($produit['image'])) {
                     </div>
                 </div>
             </div>
+
+            <!-- Champs personnalisés -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white fw-bold"><i class="bi bi-pencil-square me-2"></i>Champs personnalisés</div>
+                <div class="card-body">
+                    <div id="customFieldsContainer">
+                        <?php foreach ($custom_fields as $i => $field): ?>
+                        <div class="custom-field-row mb-3 border rounded p-3 position-relative">
+                            <button type="button" class="btn-close position-absolute top-0 end-0 remove-field" aria-label="Supprimer"></button>
+                            <div class="mb-2">
+                                <label class="form-label">Libellé</label>
+                                <input type="text" name="custom_label[]" class="form-control" value="<?= htmlspecialchars($field['label']) ?>">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Type</label>
+                                <select name="custom_type[]" class="form-select custom-type-select">
+                                    <?php foreach (['text'=>'Texte','textarea'=>'Zone de texte','image'=>'Image','number'=>'Nombre'] as $k=>$v): ?>
+                                    <option value="<?= $k ?>" <?= $field['type']==$k ? 'selected' : '' ?>><?= $v ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-2 custom-value-group">
+                                <?php if ($field['type']==='image'): ?>
+                                    <?php if (!empty($field['value'])): ?>
+                                        <div class="mb-2">
+                                            <img src="../uploads/custom_fields/<?= htmlspecialchars($field['value']) ?>" style="max-height:100px;" class="rounded border">
+                                            <div class="form-check">
+                                               <input class="form-check-input" type="checkbox" name="delete_custom_image[<?= $i ?>]" value="1">
+                                               <label class="form-check-label">Supprimer l'image existante</label>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                    <input type="file" name="custom_image[]" class="form-control" accept="image/*">
+                                    <input type="hidden" name="custom_image_existing[]" value="<?= htmlspecialchars($field['value']) ?>">
+                                <?php else: ?>
+                                    <textarea name="custom_value[]" class="form-control"><?= htmlspecialchars($field['value']) ?></textarea>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addCustomField"><i class="bi bi-plus"></i> Ajouter un champ</button>
+                </div>
+            </div>
+
         </div>
 
         <!-- Sidebar -->
@@ -250,4 +340,6 @@ function previewImage(input) {
         reader.readAsDataURL(input.files[0]);
     }
 }
+
+// custom fields behaviour already added above in-line
 </script>
