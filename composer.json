@@ -1,0 +1,11 @@
+{
+  "name": "ousber1/plugin",
+  "description": "Gestion de service d'impression - plugin",
+  "type": "project",
+  "require": {
+    "php": ">=8.0"
+  },
+  "scripts": {
+    "migrate": "php database/apply_migrations.php"
+  }
+}
