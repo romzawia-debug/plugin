@@ -14,6 +14,9 @@ if (!$produit) {
     return;
 }
 
+$stock_geré = !empty($produit['gestion_stock']);
+$stock_disponible = !$stock_geré || (int)$produit['stock_quantite'] > 0;
+
 // Options du produit
 $stmt = $db->prepare("SELECT * FROM produit_options WHERE produit_id = ? ORDER BY ordre");
 $stmt->execute([$produit_id]);
@@ -28,14 +31,21 @@ $similaires = $stmt->fetchAll();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_panier'])) {
     verifyCsrf();
     $quantite = max(1, (int)($_POST['quantite'] ?? 1));
+    if (!stockDisponibleProduit($produit, $quantite)) {
+        setFlash('danger', '<i class="bi bi-exclamation-triangle me-2"></i>Stock insuffisant pour ce produit.');
+        redirect('index.php?page=produit&id=' . $produit_id);
+    }
     $opts = [];
     if (!empty($_POST['options']) && is_array($_POST['options'])) {
         foreach ($_POST['options'] as $nom => $val) {
             $opts[] = ['nom' => $nom, 'valeur' => $val, 'prix_supplement' => 0];
         }
     }
-    ajouterAuPanier($produit_id, $quantite, $opts);
-    setFlash('success', '<i class="bi bi-check-circle me-2"></i>Produit ajouté au panier avec succès !');
+    if (ajouterAuPanier($produit_id, $quantite, $opts)) {
+        setFlash('success', '<i class="bi bi-check-circle me-2"></i>Produit ajouté au panier avec succès !');
+    } else {
+        setFlash('danger', '<i class="bi bi-exclamation-triangle me-2"></i>Impossible d\'ajouter ce produit (stock insuffisant).');
+    }
     redirect('index.php?page=produit&id=' . $produit_id);
 }
 
@@ -85,6 +95,13 @@ if (!empty($produit['image']) && file_exists(__DIR__ . '/../uploads/produits/' .
                 <div class="d-flex align-items-center gap-3 mb-4">
                     <span class="display-6 fw-bold text-primary"><?= formatPrix($produit['prix_base']) ?></span>
                     <span class="text-muted">/ <?= $produit['unite'] ?></span>
+                    <?php if ($stock_geré): ?>
+                        <?php if ($stock_disponible): ?>
+                            <span class="badge bg-success">Stock: <?= (int)$produit['stock_quantite'] ?></span>
+                        <?php else: ?>
+                            <span class="badge bg-danger">Rupture de stock</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
 
                 <div class="row g-3 mb-4">
@@ -148,14 +165,14 @@ if (!empty($produit['image']) && file_exists(__DIR__ . '/../uploads/produits/' .
                         <label class="form-label fw-semibold">Quantité</label>
                         <div class="input-group" style="max-width: 200px;">
                             <button type="button" class="btn btn-outline-primary" onclick="changeQte(-1)">-</button>
-                            <input type="number" name="quantite" id="quantite" class="form-control text-center" value="<?= $produit['quantite_min'] ?>" min="<?= $produit['quantite_min'] ?>">
+                            <input type="number" name="quantite" id="quantite" class="form-control text-center" value="<?= $produit['quantite_min'] ?>" min="<?= $produit['quantite_min'] ?>" <?= !$stock_disponible ? 'disabled' : '' ?>>
                             <button type="button" class="btn btn-outline-primary" onclick="changeQte(1)">+</button>
                         </div>
                     </div>
 
                     <div class="d-flex gap-3">
-                        <button type="submit" name="ajouter_panier" value="1" class="btn btn-primary btn-lg">
-                            <i class="bi bi-cart-plus me-2"></i>Ajouter au panier
+                        <button type="submit" name="ajouter_panier" value="1" class="btn btn-primary btn-lg" <?= !$stock_disponible ? 'disabled' : '' ?>>
+                            <i class="bi bi-cart-plus me-2"></i><?= $stock_disponible ? 'Ajouter au panier' : 'Indisponible' ?>
                         </button>
                         <a href="https://wa.me/<?= str_replace(['+', ' ', '-'], '', APP_PHONE) ?>?text=Bonjour, je suis intéressé par: <?= urlencode($produit['nom']) ?>"
                            class="btn btn-success btn-lg" target="_blank">

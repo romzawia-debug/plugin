@@ -114,6 +114,12 @@ function ajouterAuPanier($produit_id, $quantite, $options = []) {
     $produit = $stmt->fetch();
     if (!$produit) return false;
 
+    $item_key = $produit_id . '_' . md5(json_encode($options));
+    $quantite_existante = $_SESSION['panier'][$item_key]['quantite'] ?? 0;
+    if (!stockDisponibleProduit($produit, $quantite + $quantite_existante)) {
+        return false;
+    }
+
     $prix = $produit['prix_base'];
     $supplement = 0;
     foreach ($options as $opt) {
@@ -121,8 +127,6 @@ function ajouterAuPanier($produit_id, $quantite, $options = []) {
             $supplement += floatval($opt['prix_supplement']);
         }
     }
-
-    $item_key = $produit_id . '_' . md5(json_encode($options));
 
     if (isset($_SESSION['panier'][$item_key])) {
         $_SESSION['panier'][$item_key]['quantite'] += $quantite;
@@ -142,6 +146,25 @@ function ajouterAuPanier($produit_id, $quantite, $options = []) {
         ];
     }
     return true;
+}
+
+function stockDisponibleProduit($produit, $quantite) {
+    if (empty($produit) || !isset($produit['gestion_stock'])) {
+        return true;
+    }
+
+    if ((int)$produit['gestion_stock'] !== 1) {
+        return true;
+    }
+
+    return (int)$quantite <= (int)$produit['stock_quantite'];
+}
+
+function getProduitById($produit_id) {
+    $db = getDB();
+    $stmt = $db->prepare("SELECT * FROM produits WHERE id = ?");
+    $stmt->execute([(int)$produit_id]);
+    return $stmt->fetch();
 }
 
 function supprimerDuPanier($item_key) {

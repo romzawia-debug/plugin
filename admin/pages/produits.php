@@ -57,7 +57,7 @@ $categories = $db->query("SELECT * FROM categories ORDER BY ordre")->fetchAll();
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="bg-light">
-                    <tr><th>Produit</th><th>Catégorie</th><th class="text-end">Prix</th><th>Unité</th><th>Délai</th><th>Statut</th><th>Actions</th></tr>
+                    <tr><th>Produit</th><th>Catégorie</th><th class="text-end">Prix</th><th>Unité</th><th>Stock</th><th>Délai</th><th>Statut</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($produits as $p): ?>
@@ -69,6 +69,17 @@ $categories = $db->query("SELECT * FROM categories ORDER BY ordre")->fetchAll();
                         <td><span class="badge bg-primary-soft text-primary"><?= $p['categorie_nom'] ?></span></td>
                         <td class="text-end fw-bold"><?= formatPrix($p['prix_base']) ?></td>
                         <td><small><?= $p['unite'] ?></small></td>
+                        <td>
+                            <?php if (!empty($p['gestion_stock'])): ?>
+                                <?php if ((int)$p['stock_quantite'] > 0): ?>
+                                    <span class="badge bg-success">En stock: <?= (int)$p['stock_quantite'] ?></span>
+                                <?php else: ?>
+                                    <span class="badge bg-danger">Rupture</span>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">Illimité</span>
+                            <?php endif; ?>
+                        </td>
                         <td><small><?= $p['delai_production'] ?></small></td>
                         <td>
                             <?php if ($p['actif']): ?><span class="badge bg-success">Actif</span><?php else: ?><span class="badge bg-secondary">Inactif</span><?php endif; ?>

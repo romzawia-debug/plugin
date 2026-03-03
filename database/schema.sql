@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS produits (
     prix_unitaire DECIMAL(10,2) DEFAULT NULL,
     unite VARCHAR(50) DEFAULT 'pièce', -- pièce, m², mètre linéaire, etc.
     quantite_min INT DEFAULT 1,
+    gestion_stock TINYINT(1) DEFAULT 0,
+    stock_quantite INT DEFAULT 0,
     delai_production VARCHAR(100) DEFAULT '24-48h',
     image VARCHAR(255) DEFAULT NULL,
     images_galerie TEXT, -- JSON array d'images

@@ -122,6 +122,11 @@ $produits = $stmt->fetchAll();
                                 <?php else: ?>
                                     <i class="bi bi-printer fs-1 text-primary"></i>
                                 <?php endif; ?>
+                                <?php if (!empty($prod['gestion_stock'])): ?>
+                                <span class="badge <?= (int)$prod['stock_quantite'] > 0 ? 'bg-success' : 'bg-danger' ?> position-absolute top-0 start-0 m-2">
+                                    <?= (int)$prod['stock_quantite'] > 0 ? 'Stock: ' . (int)$prod['stock_quantite'] : 'Rupture' ?>
+                                </span>
+                                <?php endif; ?>
                                 <?php if ($prod['populaire']): ?>
                                 <span class="badge bg-warning text-dark position-absolute top-0 end-0 m-2">
                                     <i class="bi bi-star-fill me-1"></i>Populaire

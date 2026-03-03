@@ -27,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sauvegarder'])) {
         'prix_unitaire' => floatval($_POST['prix_unitaire']) ?: null,
         'unite' => clean($_POST['unite']),
         'quantite_min' => (int)$_POST['quantite_min'],
+        'gestion_stock' => isset($_POST['gestion_stock']) ? 1 : 0,
+        'stock_quantite' => max(0, (int)($_POST['stock_quantite'] ?? 0)),
         'delai_production' => clean($_POST['delai_production']),
         'populaire' => isset($_POST['populaire']) ? 1 : 0,
         'actif' => isset($_POST['actif']) ? 1 : 0,
@@ -59,11 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sauvegarder'])) {
     $data['image'] = $image_name;
 
     if ($produit_id && $produit) {
-        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, delai_production=?, populaire=?, actif=?, ordre=?, image=? WHERE id=?";
+        $sql = "UPDATE produits SET categorie_id=?, nom=?, slug=?, description=?, description_courte=?, prix_base=?, prix_unitaire=?, unite=?, quantite_min=?, gestion_stock=?, stock_quantite=?, delai_production=?, populaire=?, actif=?, ordre=?, image=? WHERE id=?";
         $db->prepare($sql)->execute([...array_values($data), $produit_id]);
         setFlash('success', 'Produit mis à jour avec succès.');
     } else {
-        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, delai_production, populaire, actif, ordre, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        $sql = "INSERT INTO produits (categorie_id, nom, slug, description, description_courte, prix_base, prix_unitaire, unite, quantite_min, gestion_stock, stock_quantite, delai_production, populaire, actif, ordre, image) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         $db->prepare($sql)->execute(array_values($data));
         $produit_id = $db->lastInsertId();
         setFlash('success', 'Produit créé avec succès.');
@@ -184,6 +186,11 @@ if ($produit && !empty($produit['image'])) {
                             <input type="number" name="quantite_min" class="form-control" min="1" value="<?= $produit['quantite_min'] ?? 1 ?>">
                         </div>
                         <div class="col-md-4">
+                            <label class="form-label">Stock disponible</label>
+                            <input type="number" name="stock_quantite" class="form-control" min="0" value="<?= $produit['stock_quantite'] ?? 0 ?>">
+                            <small class="text-muted">Utilisé seulement si la gestion de stock est activée.</small>
+                        </div>
+                        <div class="col-md-4">
                             <label class="form-label">Délai de production</label>
                             <input type="text" name="delai_production" class="form-control" value="<?= htmlspecialchars($produit['delai_production'] ?? '24-48h') ?>">
                         </div>
@@ -205,9 +212,13 @@ if ($produit && !empty($produit['image'])) {
                         <input class="form-check-input" type="checkbox" name="actif" id="actif" <?= (!$produit || $produit['actif']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="actif">Actif (visible sur le site)</label>
                     </div>
-                    <div class="form-check form-switch">
+                    <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" name="populaire" id="populaire" <?= ($produit && $produit['populaire']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="populaire">Produit populaire</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="gestion_stock" id="gestion_stock" <?= ($produit && !empty($produit['gestion_stock'])) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="gestion_stock">Activer la gestion de stock</label>
                     </div>
                 </div>
             </div>

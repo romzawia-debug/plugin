@@ -21,49 +21,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['creer_commande'])) {
     $notes = clean($_POST['notes_internes'] ?? '');
     $remise = floatval($_POST['remise'] ?? 0);
 
-    // Créer/trouver client
-    $stmt = $db->prepare("SELECT id FROM clients WHERE telephone = ?");
-    $stmt->execute([$telephone]);
-    $client = $stmt->fetch();
-    if ($client) {
-        $client_id = $client['id'];
-    } else {
-        $db->prepare("INSERT INTO clients (nom, prenom, telephone, email, adresse, ville) VALUES (?,?,?,?,?,?)")->execute([$nom, $prenom, $telephone, $email, $adresse, $ville]);
-        $client_id = $db->lastInsertId();
-    }
+    try {
+        $db->beginTransaction();
 
-    // Calculer le total
-    $sous_total = 0;
-    $articles = $_POST['articles'] ?? [];
-    foreach ($articles as $art) {
-        if (!empty($art['designation']) && $art['quantite'] > 0) {
-            $sous_total += floatval($art['prix_unitaire']) * intval($art['quantite']);
+        // Créer/trouver client
+        $stmt = $db->prepare("SELECT id FROM clients WHERE telephone = ?");
+        $stmt->execute([$telephone]);
+        $client = $stmt->fetch();
+        if ($client) {
+            $client_id = $client['id'];
+        } else {
+            $db->prepare("INSERT INTO clients (nom, prenom, telephone, email, adresse, ville) VALUES (?,?,?,?,?,?)")->execute([$nom, $prenom, $telephone, $email, $adresse, $ville]);
+            $client_id = $db->lastInsertId();
         }
-    }
 
-    $frais_livraison = floatval($_POST['frais_livraison'] ?? 0);
-    $total = $sous_total - $remise + $frais_livraison;
-    $numero = genererNumeroCommande();
+        // Calculer le total + valider stock
+        $sous_total = 0;
+        $articles = $_POST['articles'] ?? [];
+        foreach ($articles as $art) {
+            if (!empty($art['designation']) && $art['quantite'] > 0) {
+                $sous_total += floatval($art['prix_unitaire']) * intval($art['quantite']);
 
-    $stmt = $db->prepare("INSERT INTO commandes (numero_commande, client_id, client_nom, client_telephone, client_email, client_adresse, client_ville, sous_total, remise_montant, frais_livraison, total, type_livraison, notes_internes, source, admin_id, priorite, statut) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    $stmt->execute([$numero, $client_id, "$prenom $nom", $telephone, $email, $adresse, $ville, $sous_total, $remise, $frais_livraison, $total, $type_livraison, $notes, $source, $admin['id'], $priorite, 'confirmee']);
-    $commande_id = $db->lastInsertId();
-
-    foreach ($articles as $art) {
-        if (!empty($art['designation']) && $art['quantite'] > 0) {
-            $px_total = floatval($art['prix_unitaire']) * intval($art['quantite']);
-            $db->prepare("INSERT INTO commande_lignes (commande_id, produit_id, designation, quantite, prix_unitaire, prix_total, notes) VALUES (?,?,?,?,?,?,?)")->execute([
-                $commande_id, $art['produit_id'] ?: null, $art['designation'], $art['quantite'], $art['prix_unitaire'], $px_total, $art['notes'] ?? ''
-            ]);
+                if (!empty($art['produit_id'])) {
+                    $stmt = $db->prepare("SELECT id, nom, gestion_stock, stock_quantite FROM produits WHERE id = ? FOR UPDATE");
+                    $stmt->execute([(int)$art['produit_id']]);
+                    $prod_stock = $stmt->fetch();
+                    if (!$prod_stock) {
+                        throw new Exception('Produit introuvable pour la ligne: ' . $art['designation']);
+                    }
+                    if (!stockDisponibleProduit($prod_stock, (int)$art['quantite'])) {
+                        throw new Exception('Stock insuffisant pour: ' . $prod_stock['nom']);
+                    }
+                }
+            }
         }
+
+        $frais_livraison = floatval($_POST['frais_livraison'] ?? 0);
+        $total = $sous_total - $remise + $frais_livraison;
+        $numero = genererNumeroCommande();
+
+        $stmt = $db->prepare("INSERT INTO commandes (numero_commande, client_id, client_nom, client_telephone, client_email, client_adresse, client_ville, sous_total, remise_montant, frais_livraison, total, type_livraison, notes_internes, source, admin_id, priorite, statut) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $stmt->execute([$numero, $client_id, "$prenom $nom", $telephone, $email, $adresse, $ville, $sous_total, $remise, $frais_livraison, $total, $type_livraison, $notes, $source, $admin['id'], $priorite, 'confirmee']);
+        $commande_id = $db->lastInsertId();
+
+        foreach ($articles as $art) {
+            if (!empty($art['designation']) && $art['quantite'] > 0) {
+                $px_total = floatval($art['prix_unitaire']) * intval($art['quantite']);
+                $db->prepare("INSERT INTO commande_lignes (commande_id, produit_id, designation, quantite, prix_unitaire, prix_total, notes) VALUES (?,?,?,?,?,?,?)")->execute([
+                    $commande_id, $art['produit_id'] ?: null, $art['designation'], $art['quantite'], $art['prix_unitaire'], $px_total, $art['notes'] ?? ''
+                ]);
+
+                if (!empty($art['produit_id'])) {
+                    $db->prepare("UPDATE produits SET stock_quantite = stock_quantite - ? WHERE id = ? AND gestion_stock = 1")
+                        ->execute([(int)$art['quantite'], (int)$art['produit_id']]);
+                }
+            }
+        }
+
+        $db->prepare("INSERT INTO commande_historique (commande_id, statut_nouveau, commentaire, admin_id) VALUES (?,?,?,?)")->execute([$commande_id, 'confirmee', 'Commande créée par ' . $admin['prenom'], $admin['id']]);
+        $db->prepare("UPDATE clients SET total_commandes = total_commandes + 1, total_depense = total_depense + ? WHERE id = ?")->execute([$total, $client_id]);
+
+        $db->commit();
+
+        setFlash('success', "Commande #$numero créée avec succès !");
+        redirect('index.php?page=commande_detail&id=' . $commande_id);
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        setFlash('danger', $e->getMessage());
     }
-
-    $db->prepare("INSERT INTO commande_historique (commande_id, statut_nouveau, commentaire, admin_id) VALUES (?,?,?,?)")->execute([$commande_id, 'confirmee', 'Commande créée par ' . $admin['prenom'], $admin['id']]);
-    $db->prepare("UPDATE clients SET total_commandes = total_commandes + 1, total_depense = total_depense + ? WHERE id = ?")->execute([$total, $client_id]);
-
-    setFlash('success', "Commande #$numero créée avec succès !");
-    redirect('index.php?page=commande_detail&id=' . $commande_id);
 }
+
 ?>
 
 <div class="mb-4">
