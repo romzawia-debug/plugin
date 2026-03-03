@@ -285,6 +285,28 @@ if ($produit && !empty($produit['image'])) {
                         <?php endforeach; ?>
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-primary" id="addCustomField"><i class="bi bi-plus"></i> Ajouter un champ</button>
++                    <!-- template used for new custom field rows -->
++                    <template id="customFieldTemplate">
++                        <div class="custom-field-row mb-3 border rounded p-3 position-relative">
++                            <button type="button" class="btn-close position-absolute top-0 end-0 remove-field" aria-label="Supprimer"></button>
++                            <div class="mb-2">
++                                <label class="form-label">Libellé</label>
++                                <input type="text" name="custom_label[]" class="form-control">
++                            </div>
++                            <div class="mb-2">
++                                <label class="form-label">Type</label>
++                                <select name="custom_type[]" class="form-select custom-type-select">
++                                    <option value="text">Texte</option>
++                                    <option value="textarea">Zone de texte</option>
++                                    <option value="image">Image</option>
++                                    <option value="number">Nombre</option>
++                                </select>
++                            </div>
++                            <div class="mb-2 custom-value-group">
++                                <textarea name="custom_value[]" class="form-control"></textarea>
++                            </div>
++                        </div>
++                    </template>
                 </div>
             </div>
 
@@ -342,4 +364,46 @@ function previewImage(input) {
 }
 
 // custom fields behaviour already added above in-line
+
+// helper to attach event listeners to remove buttons and type selectors
+function initCustomFieldEvents(container) {
+    container = container || document.getElementById('customFieldsContainer');
+    // remove buttons
+    container.querySelectorAll('.remove-field').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('.custom-field-row');
+            if (row) row.remove();
+        });
+    });
+    // type change
+    container.querySelectorAll('.custom-type-select').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const row = this.closest('.custom-field-row');
+            const group = row.querySelector('.custom-value-group');
+            const type = this.value;
+            let html = '';
+            if (type === 'image') {
+                html = '<input type="file" name="custom_image[]" class="form-control" accept="image/*">';
+                html += '<input type="hidden" name="custom_image_existing[]" value="">';
+            } else if (type === 'textarea') {
+                html = '<textarea name="custom_value[]" class="form-control"></textarea>';
+            } else {
+                // text or number
+                html = '<textarea name="custom_value[]" class="form-control"></textarea>';
+            }
+            group.innerHTML = html;
+        });
+    });
+}
+
+// add new field row
+document.getElementById('addCustomField').addEventListener('click', function() {
+    const tpl = document.getElementById('customFieldTemplate');
+    const clone = tpl.content.cloneNode(true);
+    document.getElementById('customFieldsContainer').appendChild(clone);
+    initCustomFieldEvents();
+});
+
+// initialize on load
+initCustomFieldEvents();
 </script>
