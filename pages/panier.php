@@ -16,10 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $key = $_POST['item_key'];
         $qte = max(1, (int)$_POST['quantite']);
         if (isset($_SESSION['panier'][$key])) {
-            $_SESSION['panier'][$key]['quantite'] = $qte;
-            $_SESSION['panier'][$key]['prix_total'] = $_SESSION['panier'][$key]['prix_unitaire'] * $qte;
+            $produit = getProduitById((int)$_SESSION['panier'][$key]['produit_id']);
+            if ($produit && stockDisponibleProduit($produit, $qte)) {
+                $_SESSION['panier'][$key]['quantite'] = $qte;
+                $_SESSION['panier'][$key]['prix_total'] = $_SESSION['panier'][$key]['prix_unitaire'] * $qte;
+                setFlash('success', 'Quantité mise à jour.');
+            } else {
+                setFlash('danger', 'Stock insuffisant pour cette quantité.');
+            }
         }
-        setFlash('success', 'Quantité mise à jour.');
         redirect('index.php?page=panier');
     }
     if (isset($_POST['vider'])) {

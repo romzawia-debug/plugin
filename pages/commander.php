@@ -35,72 +35,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['valider_commande'])) 
     if ($type_livraison === 'livraison' && !$ville_id) $erreurs[] = 'Veuillez sélectionner une ville';
 
     if (empty($erreurs)) {
-        // Chercher ou créer le client
-        $stmt = $db->prepare("SELECT id FROM clients WHERE telephone = ?");
-        $stmt->execute([$telephone]);
-        $client = $stmt->fetch();
+        try {
+            $db->beginTransaction();
 
-        if ($client) {
-            $client_id = $client['id'];
-            $db->prepare("UPDATE clients SET nom=?, prenom=?, email=?, adresse=?, ville=?, code_postal=? WHERE id=?")->execute([$nom, $prenom, $email, $adresse, '', $code_postal, $client_id]);
-        } else {
-            $stmt = $db->prepare("INSERT INTO clients (nom, prenom, email, telephone, adresse, code_postal) VALUES (?,?,?,?,?,?)");
-            $stmt->execute([$nom, $prenom, $email, $telephone, $adresse, $code_postal]);
-            $client_id = $db->lastInsertId();
-        }
+            // Vérifier le stock en base (et verrouiller les lignes)
+            foreach ($panier as $item) {
+                $stmt = $db->prepare("SELECT id, nom, gestion_stock, stock_quantite FROM produits WHERE id = ? FOR UPDATE");
+                $stmt->execute([(int)$item['produit_id']]);
+                $prod_stock = $stmt->fetch();
 
-        // Calcul frais livraison
-        $frais_livraison = 0;
-        $ville_nom = 'Retrait en magasin';
-        if ($type_livraison === 'livraison') {
-            $frais_livraison = getFraisLivraison($ville_id);
-            if ($total_panier >= FREE_DELIVERY_MIN) $frais_livraison = 0;
-            $stmt = $db->prepare("SELECT nom FROM villes_livraison WHERE id = ?");
-            $stmt->execute([$ville_id]);
-            $v = $stmt->fetch();
-            $ville_nom = $v ? $v['nom'] : '';
-        }
+                if (!$prod_stock) {
+                    throw new Exception('Un produit du panier est introuvable.');
+                }
 
-        $tva = $total_panier * TAX_RATE;
-        $total_final = $total_panier + $frais_livraison;
+                if (!stockDisponibleProduit($prod_stock, (int)$item['quantite'])) {
+                    throw new Exception('Stock insuffisant pour le produit : ' . $prod_stock['nom']);
+                }
+            }
 
-        // Créer la commande
-        $numero = genererNumeroCommande();
-        $stmt = $db->prepare("INSERT INTO commandes (numero_commande, client_id, client_nom, client_telephone, client_email, client_adresse, client_ville, client_code_postal, sous_total, frais_livraison, tva_montant, total, type_livraison, notes_client, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $stmt->execute([
-            $numero, $client_id, "$prenom $nom", $telephone, $email, $adresse, $ville_nom, $code_postal,
-            $total_panier, $frais_livraison, $tva, $total_final, $type_livraison, $notes, 'site'
-        ]);
-        $commande_id = $db->lastInsertId();
+            // Chercher ou créer le client
+            $stmt = $db->prepare("SELECT id FROM clients WHERE telephone = ?");
+            $stmt->execute([$telephone]);
+            $client = $stmt->fetch();
 
-        // Ajouter les lignes
-        foreach ($panier as $item) {
-            $stmt = $db->prepare("INSERT INTO commande_lignes (commande_id, produit_id, designation, options_selectionnees, quantite, prix_unitaire, prix_total) VALUES (?,?,?,?,?,?,?)");
+            if ($client) {
+                $client_id = $client['id'];
+                $db->prepare("UPDATE clients SET nom=?, prenom=?, email=?, adresse=?, ville=?, code_postal=? WHERE id=?")->execute([$nom, $prenom, $email, $adresse, '', $code_postal, $client_id]);
+            } else {
+                $stmt = $db->prepare("INSERT INTO clients (nom, prenom, email, telephone, adresse, code_postal) VALUES (?,?,?,?,?,?)");
+                $stmt->execute([$nom, $prenom, $email, $telephone, $adresse, $code_postal]);
+                $client_id = $db->lastInsertId();
+            }
+
+            // Calcul frais livraison
+            $frais_livraison = 0;
+            $ville_nom = 'Retrait en magasin';
+            if ($type_livraison === 'livraison') {
+                $frais_livraison = getFraisLivraison($ville_id);
+                if ($total_panier >= FREE_DELIVERY_MIN) $frais_livraison = 0;
+                $stmt = $db->prepare("SELECT nom FROM villes_livraison WHERE id = ?");
+                $stmt->execute([$ville_id]);
+                $v = $stmt->fetch();
+                $ville_nom = $v ? $v['nom'] : '';
+            }
+
+            $tva = $total_panier * TAX_RATE;
+            $total_final = $total_panier + $frais_livraison;
+
+            // Créer la commande
+            $numero = genererNumeroCommande();
+            $stmt = $db->prepare("INSERT INTO commandes (numero_commande, client_id, client_nom, client_telephone, client_email, client_adresse, client_ville, client_code_postal, sous_total, frais_livraison, tva_montant, total, type_livraison, notes_client, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
-                $commande_id,
-                $item['produit_id'],
-                $item['nom'],
-                json_encode($item['options']),
-                $item['quantite'],
-                $item['prix_unitaire'],
-                $item['prix_total']
+                $numero, $client_id, "$prenom $nom", $telephone, $email, $adresse, $ville_nom, $code_postal,
+                $total_panier, $frais_livraison, $tva, $total_final, $type_livraison, $notes, 'site'
             ]);
+            $commande_id = $db->lastInsertId();
+
+            // Ajouter les lignes + décrémenter stock si activé
+            foreach ($panier as $item) {
+                $stmt = $db->prepare("INSERT INTO commande_lignes (commande_id, produit_id, designation, options_selectionnees, quantite, prix_unitaire, prix_total) VALUES (?,?,?,?,?,?,?)");
+                $stmt->execute([
+                    $commande_id,
+                    $item['produit_id'],
+                    $item['nom'],
+                    json_encode($item['options']),
+                    $item['quantite'],
+                    $item['prix_unitaire'],
+                    $item['prix_total']
+                ]);
+
+                $db->prepare("UPDATE produits SET stock_quantite = stock_quantite - ? WHERE id = ? AND gestion_stock = 1")
+                    ->execute([(int)$item['quantite'], (int)$item['produit_id']]);
+            }
+
+            // Historique
+            $db->prepare("INSERT INTO commande_historique (commande_id, statut_nouveau, commentaire) VALUES (?,?,?)")->execute([$commande_id, 'nouvelle', 'Commande créée depuis le site web']);
+
+            // Notification
+            creerNotification('commande', 'Nouvelle commande #' . $numero, "Commande de $prenom $nom - " . formatPrix($total_final), 'admin/index.php?page=commande_detail&id=' . $commande_id);
+
+            // Mettre à jour le client
+            $db->prepare("UPDATE clients SET total_commandes = total_commandes + 1, total_depense = total_depense + ? WHERE id = ?")->execute([$total_final, $client_id]);
+
+            $db->commit();
+
+            // Vider le panier
+            viderPanier();
+            $_SESSION['derniere_commande'] = $numero;
+
+            redirect('index.php?page=confirmation');
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $erreurs[] = $e->getMessage();
         }
-
-        // Historique
-        $db->prepare("INSERT INTO commande_historique (commande_id, statut_nouveau, commentaire) VALUES (?,?,?)")->execute([$commande_id, 'nouvelle', 'Commande créée depuis le site web']);
-
-        // Notification
-        creerNotification('commande', 'Nouvelle commande #' . $numero, "Commande de $prenom $nom - " . formatPrix($total_final), 'admin/index.php?page=commande_detail&id=' . $commande_id);
-
-        // Mettre à jour le client
-        $db->prepare("UPDATE clients SET total_commandes = total_commandes + 1, total_depense = total_depense + ? WHERE id = ?")->execute([$total_final, $client_id]);
-
-        // Vider le panier
-        viderPanier();
-        $_SESSION['derniere_commande'] = $numero;
-
-        redirect('index.php?page=confirmation');
     }
 }
 ?>
