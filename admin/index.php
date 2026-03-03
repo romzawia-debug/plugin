@@ -47,7 +47,7 @@ $pages_admin = [
     'depenses', 'rapports',
     'seo', 'seo_kit', 'pixels', 'import_export',
     'header_footer', 'smtp',
-    'parametres', 'villes', 'admins', 'notifications'
+    'parametres', 'villes', 'admins', 'notifications', 'migrations'
 ];
 
 include __DIR__ . '/includes/header.php';
